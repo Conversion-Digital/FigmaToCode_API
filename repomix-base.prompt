@@ -1,0 +1,38 @@
+## THIS TASK
+
+debug:dev: [generateTailwindv4FromFigma][225] exception ReferenceError: figma is not defined
+debug:dev:     at commonStroke (../../packages/backend/src/common/commonStroke.ts:26:35)
+debug:dev:     at tailwindBorderWidth (../../packages/backend/src/tailwind/builderImpl/tailwindBorder.ts:60:36)
+debug:dev:     at TailwindDefaultBuilder.border (../../packages/backend/src/tailwind/tailwindDefaultBuilder.ts:115:58)
+debug:dev:     at TailwindDefaultBuilder.commonShapeStyles (../../packages/backend/src/tailwind/tailwindDefaultBuilder.ts:99:9)
+debug:dev:     at tailwindContainer (../../packages/backend/src/tailwind/tailwindMain.ts:240:5)
+debug:dev:     at tailwindFrame (../../packages/backend/src/tailwind/tailwindMain.ts:217:23)
+debug:dev:     at async tailwindWidgetGenerator (../../packages/backend/src/tailwind/tailwindMain.ts:49:16)
+debug:dev:     at async tailwindFrame (../../packages/backend/src/tailwind/tailwindMain.ts:202:22)
+debug:dev:     at async tailwindWidgetGenerator (../../packages/backend/src/tailwind/tailwindMain.ts:49:16)
+debug:dev:     at async tailwindFrame (../../packages/backend/src/tailwind/tailwindMain.ts:202:22)
+debug:dev:     at async tailwindWidgetGenerator (../../packages/backend/src/tailwind/tailwindMain.ts:49:16)
+debug:dev:     at async tailwindFrame (../../packages/backend/src/tailwind/tailwindMain.ts:202:22)
+debug:dev:     at async tailwindWidgetGenerator (../../packages/backend/src/tailwind/tailwindMain.ts:49:16)
+debug:dev:     at async tailwindFrame (../../packages/backend/src/tailwind/tailwindMain.ts:202:22)
+debug:dev:     at async tailwindWidgetGenerator (../../packages/backend/src/tailwind/tailwindMain.ts:49:16)
+debug:dev:     at async tailwindMain (../../packages/backend/src/tailwind/tailwindMain.ts:28:15)
+debug:dev:     at async generateTailwindv4FromFigma (../../packages/backend/src/api/tailwindv4Api.ts:224:21)
+debug:dev:     at async POST (app/api/generate-tailwind/route.ts:19:17)
+debug:dev:   24 |       bottom: node.strokeBottomWeight / divideBy,
+debug:dev:   25 |     };
+debug:dev: > 26 |   } else if (node.strokeWeight !== figma.mixed && node.strokeWeight !== 0) {
+debug:dev:      |                                   ^
+debug:dev:   27 |     return { all: node.strokeWeight / divideBy };
+debug:dev:   28 |   }
+
+packages/FigmaToCode/apps/debug/tsconfig.json
+
+"typeRoots": [
+      "node_modules/@types",
+      "node_modules/@figma"
+    ],
+
+    typeroots was added but doesn't seem to make a difference what else is needed? 
+
+## END THIS TASK

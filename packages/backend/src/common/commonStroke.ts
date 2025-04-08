@@ -23,7 +23,7 @@ export const commonStroke = (
       right: node.strokeRightWeight / divideBy,
       bottom: node.strokeBottomWeight / divideBy,
     };
-  } else if (node.strokeWeight !== figma.mixed && node.strokeWeight !== 0) {
+  } else if (typeof(figma) !== 'undefined' && node.strokeWeight !== figma.mixed && node.strokeWeight !== 0) {
     return { all: node.strokeWeight / divideBy };
   }
 
