@@ -44,9 +44,9 @@ function getDefaultTailwindSettings(): PluginSettings {
     framework: "Tailwind",
     showLayerNames: false,
     useOldPluginVersion2025: false,
-    responsiveRoot: false,
+    responsiveRoot: true,
     htmlGenerationMode: "html",
-    tailwindGenerationMode: "html",
+    tailwindGenerationMode: "jsx",
     baseFontSize: 16,
     useTailwind4: true,
     roundTailwindValues: true,
@@ -192,7 +192,7 @@ export async function generateTailwindv4FromFigma(
     console.log("[generateTailwindv4FromFigma] calling 3");
     throw new Error("No nodes found in Figma API response");
   }else{
-    console.log(`[generateTailwindv4FromFigma][calling 3aa] data.nodes.length = ${data.nodes}`, data);
+    // console.log(`[generateTailwindv4FromFigma][calling 3aa] data.nodes.length = ${data.nodes}`, data);
   }
 
   // parse the nodes from the REST response

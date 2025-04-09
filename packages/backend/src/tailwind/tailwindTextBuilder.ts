@@ -19,12 +19,16 @@ export class TailwindTextBuilder extends TailwindDefaultBuilder {
     text: string;
     openTypeFeatures: { [key: string]: boolean };
   }[] {
+    // console.log("getTextSegments[22] ", node.id)
     const segments = (node as any)
       .styledTextSegments as StyledTextSegmentSubset[];
 
     if (!segments) {
+      // console.log("getTextSegments[26] No segements ending", node.id)
       return [];
     }
+
+    console.log("getTextSegments[29] about to map segments ", node.id)
 
     return segments.map((segment) => {
       const color = this.getTailwindColorFromFills(segment.fills);
