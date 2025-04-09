@@ -91,19 +91,21 @@ export function calculateRectangleFromBoundingBox(
 
 export const commonIsAbsolutePosition = (node: SceneNode) => {
   if ("layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE") {
+    console.log("[commonIsAbsolutePosition][94] absolute position", node.name);
     return true;
   }
 
   if (!node.parent || node.parent === undefined) {
+    console.log("[commonIsAbsolutePosition][99] false", node.name);
     return false;
   }
 
-  if (
-    ("layoutMode" in node.parent && node.parent.layoutMode === "NONE") ||
-    !("layoutMode" in node.parent)
-  ) {
-    return true;
-  }
+  // if (
+  //   ("layoutMode" in node.parent && node.parent.layoutMode === "NONE") 
+  // ) {
+  //   console.log(`[commonIsAbsolutePosition][94] absolute position node.parent.layoutMode = ${node?.parent?.layoutMode} `, node.name);
+  //   return true;
+  // }
 
   return false;
 };

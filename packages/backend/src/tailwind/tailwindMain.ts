@@ -166,7 +166,7 @@ export const tailwindText = (
   let content = "";
   if (styledHtml.length === 1) {
     const segment = styledHtml[0];
-    console.log("tailwindText[168] ", segment.style);
+    // console.log("tailwindText[168] ", segment.style);
     layoutBuilder.addAttributes(segment.style);
     const getFeatureTag = (features: Record<string, boolean>): string => {
       if (features.SUBS === true) return "sub";
@@ -192,7 +192,7 @@ export const tailwindText = (
       .join("");
   }
   const builtAttributes = layoutBuilder.build();
-  console.log("tailwindText[192]: Built layout builder attributes:", builtAttributes);
+  // console.log("tailwindText[192]: Built layout builder attributes:", builtAttributes);
   return `\n<div${builtAttributes}>${content}</div>`;
 };
 

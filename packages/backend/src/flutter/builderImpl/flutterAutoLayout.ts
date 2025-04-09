@@ -69,6 +69,7 @@ const getFlex = (
   autoLayout: InferredAutoLayoutResult,
 ): string =>
   node.parent &&
+  typeof node.parent === "object" &&
   "layoutMode" in node.parent &&
   node.parent.layoutMode === autoLayout.layoutMode
     ? "MainAxisSize.max"

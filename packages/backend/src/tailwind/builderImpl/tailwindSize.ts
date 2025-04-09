@@ -42,6 +42,7 @@ export const tailwindSizePartial = (
   } else if (size.width === "fill") {
     if (
       nodeParent &&
+      typeof nodeParent === "object" &&
       "layoutMode" in nodeParent &&
       nodeParent.layoutMode === "HORIZONTAL"
     ) {

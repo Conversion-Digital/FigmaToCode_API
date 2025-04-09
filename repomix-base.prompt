@@ -1,5 +1,9 @@
 ## THIS TASK
 
+TailwindTextBuilderV2 extends TailwindDefaultBuilder
 
+Fix TailwindTextBuilderV2  so that it correctly extends TailwindDefaultBuilder functionality
+
+and works with tailwindMain.ts
 
 ## END THIS TASK

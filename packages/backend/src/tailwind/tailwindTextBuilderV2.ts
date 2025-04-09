@@ -62,6 +62,7 @@ export class TailwindTextBuilderV2 extends TailwindDefaultBuilder {
 
     // 2) Font size
     const fontSizePure = anyJsonNode?.style?.fontSize;
+    // console.log("buildStyle[66] fontSizePure", anyJsonNode?.style)
     if (typeof fontSizePure === "number") {
       const sizeClass = pxToFontSize(fontSizePure)
       this.addAttributes(sizeClass ? `text-${sizeClass}` : `text-[${fontSizePure}px]`)
