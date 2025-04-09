@@ -74,6 +74,7 @@ export class TailwindDefaultBuilder {
   };
 
   blend(): this {
+    console.log("blend[77]", this.node.name);
     this.addAttributes(
       tailwindVisibility(this.node),
       tailwindRotation(this.node as LayoutMixin),
@@ -267,6 +268,7 @@ export class TailwindDefaultBuilder {
     //   this.prependAttributes(stringToClassName(this.name));
     // }
     if (this.name) {
+      // console.log("dataAttributes [270]", this.name.trim());
       this.addData("layer", this.name.trim());
     }
 
@@ -295,6 +297,7 @@ export class TailwindDefaultBuilder {
         : "";
     const styles = this.style.length > 0 ? ` style="${this.style}"` : "";
     const dataAttributes = this.data.join("");
+    // console.log("dataAttributes [298]", dataAttributes);
 
     return `${dataAttributes}${classNames}${styles}`;
   }

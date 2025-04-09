@@ -59,6 +59,8 @@ interface ExtendedSceneNode {
   layoutVersion?: number;
   styles?: Record<string, any>;
   interactions?: any[];
+
+  rotation?: number; // Rotation in degrees
 }
 
 // For backward compatibility with code using MinimalSceneNode.
@@ -70,7 +72,7 @@ type MinimalSceneNode = ExtendedSceneNode;
 function getDefaultTailwindSettings(): PluginSettings {
   return {
     framework: "Tailwind",
-    showLayerNames: false,
+    showLayerNames: true,
     useOldPluginVersion2025: false,
     responsiveRoot: true,
     htmlGenerationMode: "html",
@@ -81,8 +83,8 @@ function getDefaultTailwindSettings(): PluginSettings {
     roundTailwindColors: true,
     useColorVariables: false,
     customTailwindPrefix: "",
-    embedImages: false,
-    embedVectors: false,
+    embedImages: true,
+    embedVectors: true,
     flutterGenerationMode: "snippet",
     swiftUIGenerationMode: "snippet"
   };
@@ -207,7 +209,8 @@ function parseNode(
     style: style || {},
     layoutVersion: layoutVersion || 0,
     styles: styles || {},
-    interactions: interactions || []
+    interactions: interactions || [],
+    rotation: node.rotation || null // Rotation in degrees
   };
 
   // Recursively parse children if any.

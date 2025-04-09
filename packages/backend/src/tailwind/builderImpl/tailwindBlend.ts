@@ -109,6 +109,8 @@ export const tailwindVisibility = (node: SceneNodeMixin): string => {
 export const tailwindRotation = (node: LayoutMixin): string => {
   // that's how you convert angles to clockwise radians: angle * -pi/180
   // using 3.14159 as Pi for enough precision and to avoid importing math lib.
+  if((node as any).name == "Polygon 3") 
+    console.log("rotation[112]", node as any); 
   if (node.rotation !== undefined && Math.round(node.rotation) !== 0) {
     const allowedValues = [
       -180, -90, -45, -12, -6, -3, -2, -1, 1, 2, 3, 6, 12, 45, 90, 180,

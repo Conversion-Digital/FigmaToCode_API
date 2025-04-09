@@ -62,7 +62,7 @@ export const renderAndAttachSVG = async (node: any) => {
     }
 
     try {
-      // console.log(`${nodeName} can be flattened!`);
+      console.log(`${node.name} can be flattened!`);
       const svg = (await exportAsyncProxy<string>(node, {
         format: "SVG_STRING",
       })) as string;

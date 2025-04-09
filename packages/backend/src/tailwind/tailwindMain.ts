@@ -67,10 +67,36 @@ const convertNode =
 
     // console.log("convertName[68]", node.type)
     switch (node.type) {
-      case "RECTANGLE":
-      case "ELLIPSE":
-        // console.log("convertNode: Handling RECTANGLE/ELLIPSE node", node.id);
-        return tailwindContainer(node, "", "", settings);
+      case "RECTANGLE": {
+        console.log("convertNode[71]: Handling RECTANGLE/ELLIPSE node", node.id);
+        // Update dimensions using our helper for JSON data.
+        const fixedNode = fixNodeDimensionsFromJSON(node);
+        if (node.absoluteBoundingBox && node.absoluteRenderBounds) {
+          node.rotation =
+            (node.rotation || 0) +
+            computeRotationFromBounds(
+              node.absoluteBoundingBox,
+              node.absoluteRenderBounds
+            );
+        }
+        // Pass the fixed node to tailwindContainer.
+        return tailwindContainer(fixedNode as any, "", "", settings);
+      }
+      case "ELLIPSE": {
+        console.log("convertNode[70]: Handling RECTANGLE/ELLIPSE node", node.id);
+        // Update dimensions using our helper for JSON data.
+        const fixedNode = fixNodeDimensionsFromJSON(node);
+        if (node.absoluteBoundingBox && node.absoluteRenderBounds) {
+          node.rotation =
+            (node.rotation || 0) +
+            computeRotationFromBounds(
+              node.absoluteBoundingBox,
+              node.absoluteRenderBounds
+            );
+        }
+        // Pass the fixed node to tailwindContainer.
+        return tailwindContainer(fixedNode as any, "", "", settings);
+      }
       case "GROUP":
         // console.log("convertNode: Handling GROUP node", node.id);
         return tailwindGroup(node, settings);
@@ -94,7 +120,15 @@ const convertNode =
         if (!settings.embedVectors) {
           addWarning("Vector is not supported");
           // console.log("convertNode: Warning added for VECTOR node", node.id);
+        }else if (settings.embedVectors) {
+          console.log("convertNode[100]: Handling VECTOR node with embedVectors");
+          // Try to attach an SVG if not already present.
+          const altNode = await renderAndAttachSVG(node);
+          if (altNode.svg) {
+            return tailwindWrapSVG(altNode, settings);
+          }
         }
+        console.log("convertNode[104]: Handling VECTOR node without SVG");
         return tailwindContainer(
           { ...node, type: "RECTANGLE" } as any,
           "",
@@ -232,7 +266,7 @@ export const tailwindContainer = (
   additionalAttr: string,
   settings: TailwindSettings,
 ): string => {
-  // console.log("tailwindContainer[230]: Processing container node", node.id);
+  console.log("tailwindContainer[230]: Processing container node", node.name);
   if (node.width < 0 || node.height < 0) {
     console.log("tailwindContainer[232]: Node has invalid dimensions, returning children for node", node.id);
     return children;
@@ -240,12 +274,13 @@ export const tailwindContainer = (
   const builder = new TailwindDefaultBuilder(node, settings)
     .commonPositionStyles()
     .commonShapeStyles();
+  
   if (!builder.attributes && !additionalAttr) {
     console.log("tailwindContainer[239]: Builder has no attributes, returning children for node", node.id);
     return children;
   }
   const build = builder.build(additionalAttr);
-  // console.log("tailwindContainer[243]: Built attributes:", build);
+  console.log("tailwindContainer[243]: Built attributes:", build);
   let tag = "div";
   let src = "";
   const topFill = retrieveTopFill(node.fills);
@@ -323,3 +358,74 @@ export const tailwindCodeGenTextStyles = (): string => {
   console.log("tailwindCodeGenTextStyles[318]: Generated text style code:", codeStyles);
   return codeStyles;
 };
+
+
+
+/**
+ * Compute an approximate rotation (in degrees) from the difference
+ * between the axis–aligned absoluteBoundingBox and the rotated
+ * absoluteRenderBounds.
+ *
+ * For an unrotated rectangle of width w and height h, if the node is rotated
+ * by an angle θ then its axis–aligned (rendered) width is approximately:
+ *
+ *   rw = |w * cosθ| + |h * sinθ|
+ *
+ * For small angles (or when h is not zero), one approximate method is:
+ *
+ *   sinθ ≈ (rw – w) / h
+ *
+ * and then convert from radians to degrees.
+ *
+ * @param boundingBox An object with width and height from absoluteBoundingBox.
+ * @param renderBounds  An object with width (and height) from absoluteRenderBounds.
+ * @returns The approximated rotation (in degrees).
+ */
+export function computeRotationFromBounds(
+  boundingBox: { width: number; height: number },
+  renderBounds: { width: number; height: number }
+): number {
+  const { width: w, height: h } = boundingBox;
+  const { width: rw } = renderBounds;
+
+  // Prevent division by zero.
+  if (h === 0) {
+    return 0;
+  }
+
+  // Approximate sin(theta)
+  let sinTheta = (rw - w) / h;
+  // Clamp the value between -1 and 1 to be safe.
+  sinTheta = Math.max(-1, Math.min(1, sinTheta));
+
+  const thetaRad = Math.asin(sinTheta);
+  // Convert to degrees.
+  return thetaRad * (180 / Math.PI);
+}
+
+
+function fixNodeDimensionsFromJSON(node: SceneNode): SceneNode {
+  const fixed = { ...node };
+  if (node.absoluteRenderBounds) {
+    fixed.width = node.absoluteRenderBounds.width;
+    fixed.height = node.absoluteRenderBounds.height;
+    fixed.x = node.absoluteRenderBounds.x;
+    fixed.y = node.absoluteRenderBounds.y;
+    // If you need to adjust rotation you might compute an offset.
+    // For example, if the node.rotation (raw) is in radians but the visual rotation
+    // (derived from the bounds) is actually different, you can recalc:
+    const boundsRotation = computeRotationFromBounds(
+      node.absoluteBoundingBox,
+      node.absoluteRenderBounds
+    );
+    // Combine the raw rotation with this offset (here we assume subtraction,
+    // but the logic depends on your specific scenario)
+    fixed.rotation = (node.rotation || 0) + boundsRotation;
+  } else if (node.absoluteBoundingBox) {
+    fixed.width = node.absoluteBoundingBox.width;
+    fixed.height = node.absoluteBoundingBox.height;
+    fixed.x = node.absoluteBoundingBox.x;
+    fixed.y = node.absoluteBoundingBox.y;
+  }
+  return fixed;
+}

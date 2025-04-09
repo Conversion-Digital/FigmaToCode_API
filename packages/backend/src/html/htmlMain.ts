@@ -421,6 +421,11 @@ const convertNode = (settings: HTMLSettings) => async (node: SceneNode) => {
     case "VECTOR":
       if (!settings.embedVectors && !isPreviewGlobal) {
         addWarning("Vector is not supported");
+      }else if (settings.embedVectors) {
+        const altNode = await renderAndAttachSVG(node);
+        if (altNode.svg) {
+          return htmlWrapSVG(altNode, settings);
+        }
       }
       return await htmlContainer(
         { ...node, type: "RECTANGLE" } as any,
