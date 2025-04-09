@@ -191,8 +191,9 @@ export const tailwindText = (
       })
       .join("");
   }
-  const finalAttrs = layoutBuilder.buildAttributes(); 
-  return `\n<div${finalAttrs}>${content}</div>`;
+  const builtAttributes = layoutBuilder.build();
+  console.log("tailwindText[192]: Built layout builder attributes:", builtAttributes);
+  return `\n<div${builtAttributes}>${content}</div>`;
 };
 
 const tailwindFrame = async (

@@ -1,166 +1,208 @@
-// TailwindTextBuilderV2.ts
-import { TailwindSettings } from "types";
-import { tailwindColorFromFills } from "../tailwind/builderImpl/tailwindColor";
+// packages/backend/src/tailwind/tailwindTextBuilderV2.ts
+
+import { TailwindSettings } from "types"
+import { TailwindDefaultBuilder } from "./tailwindDefaultBuilder"
+import {
+  tailwindColorFromFills,
+} from "../tailwind/builderImpl/tailwindColor"
 import {
   pxToFontSize,
   pxToLetterSpacing,
   pxToLineHeight,
-} from "../tailwind/conversionTables";
-import { TailwindDefaultBuilder } from "./tailwindDefaultBuilder";
+} from "../tailwind/conversionTables"
 
-// Helper to map numeric font weight to Tailwind classes.
-const mapFontWeight = (weight: number): string => {
-  if (weight <= 100) return "font-thin";
-  if (weight <= 200) return "font-extralight";
-  if (weight <= 300) return "font-light";
-  if (weight <= 400) return "font-normal";
-  if (weight <= 500) return "font-medium";
-  if (weight <= 600) return "font-semibold";
-  if (weight <= 700) return "font-bold";
-  if (weight <= 800) return "font-extrabold";
-  return "font-black";
-};
+/**
+ * Convert numeric fontWeight to Tailwind font-* class
+ */
+function mapFontWeight(weight: number): string {
+  if (weight <= 100) return "font-thin"
+  if (weight <= 200) return "font-extralight"
+  if (weight <= 300) return "font-light"
+  if (weight <= 400) return "font-normal"
+  if (weight <= 500) return "font-medium"
+  if (weight <= 600) return "font-semibold"
+  if (weight <= 700) return "font-bold"
+  if (weight <= 800) return "font-extrabold"
+  return "font-black"
+}
 
+/**
+ * A simple interface for text segments (if multiple style segments are in a single TextNode).
+ */
 export interface TextSegment {
-  style: string;
-  text: string;
-  openTypeFeatures: Record<string, boolean>;
+  style: string
+  text: string
+  openTypeFeatures: Record<string, boolean>
 }
 
 export class TailwindTextBuilderV2 extends TailwindDefaultBuilder {
-  private node: any;
-  private settings: TailwindSettings;
-  private styleClasses: string[];
-  private textContent: string;
+  private textContent: string
 
-  constructor(node: any, settings: TailwindSettings) {
-    this.node = node;
-    this.settings = settings;
-    this.styleClasses = [];
-    // Use the 'characters' property as the fallback text content.
-    this.textContent = node.characters || "";
-    this.buildStyle();
+  constructor(node: TextNode, settings: TailwindSettings) {
+    super(node, settings)
+    this.textContent = node.characters ?? ""
+    this.buildStyle()
   }
 
-  // Build the base styles from properties.
+  /**
+   * Build the base set of Tailwind classes for this TextNode.
+   * These are added via `this.addAttributes(...)`.
+   */
   private buildStyle() {
-    // Use the fills array to generate a text color class (fallback to text-black).
-    const textColor = tailwindColorFromFills(this.node.fills, "text");
-    this.styleClasses.push(textColor ? textColor : "text-black");
 
-    // Font size from node.style.fontSize (assumed in px).
-    const fontSize = this.node.style?.fontSize;
-    if (fontSize !== undefined) {
-      const sizeClass = pxToFontSize(fontSize);
-      this.styleClasses.push(
-        sizeClass ? `text-${sizeClass}` : `text-[${fontSize}px]`
-      );
+    const anyJsonNode = this.node as any;
+
+    // 1) Text color
+    const textColor = tailwindColorFromFills(anyJsonNode?.fills, "text")
+    if (textColor) {
+      this.addAttributes(textColor)
+    } else {
+      this.addAttributes("text-black")
     }
 
-    // Font weight from node.style.fontWeight.
-    const fontWeight = this.node.style?.fontWeight;
-    if (fontWeight !== undefined) {
-      this.styleClasses.push(mapFontWeight(fontWeight));
+    // 2) Font size
+    const fontSizePure = anyJsonNode?.style?.fontSize;
+    if (typeof fontSizePure === "number") {
+      const sizeClass = pxToFontSize(fontSizePure)
+      this.addAttributes(sizeClass ? `text-${sizeClass}` : `text-[${fontSizePure}px]`)
     }
 
-    // Font family: using arbitrary syntax if present.
-    const fontFamily = this.node.style?.fontFamily;
-    if (fontFamily) {
-      // Use single quotes; this assumes the font name does not contain a single quote.
-      this.styleClasses.push(`font-['${fontFamily}']`);
+    // 3) Font weight
+    const fontWeightPure = anyJsonNode?.style?.fontWeight;
+    if (typeof fontWeightPure === "number") {
+      this.addAttributes(mapFontWeight(fontWeightPure))
     }
 
-    // Letter spacing from node.style.letterSpacing.
-    const letterSpacing = this.node.style?.letterSpacing;
-    if (letterSpacing !== undefined && letterSpacing !== 0) {
-      const spacing = pxToLetterSpacing(letterSpacing);
-      this.styleClasses.push(
-        spacing ? `tracking-${spacing}` : `tracking-[${letterSpacing}px]`
-      );
+    // 4) Font family
+    const fontFamilyPure = anyJsonNode?.style?.fontFamily;
+    if (fontFamilyPure) {
+      const family = fontFamilyPure?.replace(/\s+/g, "_") || "sans"
+      this.addAttributes(`font-['${fontFamilyPure}']`)
     }
 
-    // Line height from node.style.lineHeightPx.
-    const lineHeight = this.node.style?.lineHeightPx;
-    if (lineHeight !== undefined && lineHeight !== 0) {
-      const lh = pxToLineHeight(lineHeight);
-      this.styleClasses.push(
-        lh ? `leading-${lh}` : `leading-[${lineHeight}px]`
-      );
-    }
-
-    // Horizontal text alignment.
-    const align = this.node.style?.textAlignHorizontal;
-    if (align) {
-      if (align === "CENTER") {
-        this.styleClasses.push("text-center");
-      } else if (align === "RIGHT") {
-        this.styleClasses.push("text-right");
+    // 5) Letter spacing
+    const letterSpacingPure = anyJsonNode?.style?.letterSpacing;
+    // const fontSizePure = anyJsonNode?.style?.fontSize
+    if (letterSpacingPure && fontSizePure) {
+      const letterSpacing = letterSpacingPure as LetterSpacing
+      const fontSize = fontSizePure as number
+      const pxVal = letterSpacing.unit === "PIXELS"
+        ? letterSpacing.value
+        : (letterSpacing.value * fontSize) / 100
+      if (pxVal) {
+        const spacingClass = pxToLetterSpacing(pxVal)
+        this.addAttributes(spacingClass ? `tracking-${spacingClass}` : `tracking-[${pxVal}px]`)
       }
-      // LEFT is default, no additional class needed.
+    }
+
+    // 6) Line height
+    const lineHeightPure = anyJsonNode?.style?.lineHeightPx;
+    // const fontSizePure = anyJsonNode?.style?.fontSize
+    if (lineHeightPure && fontSizePure) {
+      const lineHeight = lineHeightPure as LineHeight
+      const fontSize = fontSizePure as number
+      let pxVal = 0
+      if (lineHeight.unit === "PIXELS") {
+        pxVal = lineHeight.value
+      } else if (lineHeight.unit === "PERCENT") {
+        pxVal = (lineHeight.value * fontSize) / 100
+      }
+      if (pxVal > 0) {
+        const lhClass = pxToLineHeight(pxVal)
+        this.addAttributes(lhClass ? `leading-${lhClass}` : `leading-[${pxVal}px]`)
+      }
+    }
+
+    // 7) Text alignment (horizontal) – can also be done in a separate method
+    const textAlign = anyJsonNode?.style?.textAlignHorizontal;
+    if (textAlign && textAlign !== "LEFT") {
+      if (textAlign === "CENTER") {
+        this.addAttributes("text-center")
+      } else if (textAlign === "RIGHT") {
+        this.addAttributes("text-right")
+      } else if (textAlign === "JUSTIFIED") {
+        this.addAttributes("text-justify")
+      }
     }
   }
 
-//   // Chainable method to add additional attributes (class names)
-//   public addAttributes(...classes: string[]): this {
-//     this.styleClasses.push(...classes.filter((cls) => cls && cls.trim() !== ""));
-//     return this;
-//   }
+    /**
+   * https://tailwindcss.com/docs/text-align/
+   * example: text-justify
+   */
+    textAlignHorizontal(): this {
+        // if alignHorizontal is LEFT, don't do anything because that is native
+        const anyJsonNode = this.node as any;
+        // const node = this.node as TextNode;
+        const textAlign = anyJsonNode?.style?.textAlignHorizontal;
+        // only undefined in testing
+        if (textAlign && textAlign !== "LEFT") {
+          // todo when node.textAutoResize === "WIDTH_AND_HEIGHT" and there is no \n in the text, this can be ignored.
+          switch (textAlign) {
+            case "CENTER":
+              this.addAttributes(`text-center`);
+              break;
+            case "RIGHT":
+              this.addAttributes(`text-right`);
+              break;
+            case "JUSTIFIED":
+              this.addAttributes(`text-justify`);
+              break;
+            default:
+              break;
+          }
+        }
+    
+        return this;
+      }
 
-  // Chainable method: adds classes for absolute positioning if available.
+  /**
+   * https://tailwindcss.com/docs/vertical-align/
+   * example: align-top, align-middle, align-bottom
+   */
+  textAlignVertical(): this {
+    const anyJsonNode = this.node as any;
+        // const node = this.node as TextNode;
+    const textAlign = anyJsonNode?.style?.textAlignVertical;
+    switch (textAlign) {
+      case "TOP":
+        this.addAttributes("justify-start");
+        break;
+      case "CENTER":
+        this.addAttributes("justify-center");
+        break;
+      case "BOTTOM":
+        this.addAttributes("justify-end");
+        break;
+      default:
+        break;
+    }
+
+    return this;
+  }
+
+  /**
+   * Optional override of commonPositionStyles if you want to do something different for text.
+   * For example, we can just call super’s method:
+   */
   public commonPositionStyles(): this {
-    if (this.node.absoluteBoundingBox) {
-      const { x, y } = this.node.absoluteBoundingBox;
-      // Using arbitrary utility classes for left, top and absolute positioning.
-      this.addAttributes(`left-[${x}px]`, `top-[${y}px]`, "absolute");
-    }
-    return this;
+    super.commonPositionStyles()
+    return this
   }
 
-  // Chainable method for horizontal alignment.
-  public textAlignHorizontal(): this {
-    const align = this.node.style?.textAlignHorizontal;
-    if (align) {
-      if (align === "CENTER") {
-        this.addAttributes("text-center");
-      } else if (align === "RIGHT") {
-        this.addAttributes("text-right");
-      }
-    }
-    return this;
-  }
-
-  // Chainable method for vertical alignment (using approximate classes).
-  public textAlignVertical(): this {
-    const align = this.node.style?.textAlignVertical;
-    if (align) {
-      // Tailwind doesn't directly support vertical align for block text,
-      // but if you're wrapping text in a flex container, you might control it.
-      if (align === "CENTER") {
-        this.addAttributes("align-middle");
-      } else if (align === "BOTTOM") {
-        this.addAttributes("align-bottom");
-      }
-    }
-    return this;
-  }
-
-  // Return the text segments
-  // Since we have no styled segments, just return a single segment with aggregated styles.
+  /**
+   * If you need text segments for multi-style text, produce them here. For single-style text,
+   * just return one segment with the same classes we’ve placed in `this.attributes`.
+   */
   public getTextSegments(node: TextNode): TextSegment[] {
-    // console.log("tailwindText[149] ", node);
+    // Simple approach: single text style from the base classes
+    // const anyJsonNode = this.node as any;
     return [
       {
-        style: this.styleClasses.join(" "),
-        text: node.name || node.characters,
-        openTypeFeatures: {},
-      },
-    ];
+        style: this.attributes.join(" "),
+        text: node.characters || node.name,
+        openTypeFeatures: {}
+      }
+    ]
   }
-
-//   // Final build method returns the complete HTML string.
-//   public build(): string {
-//     // const classes = this.styleClasses.join(" ");
-//     // return `<div class="${classes}">${this.textContent}</div>`;
-//     return `${this.textContent}`;
-//   }
 }
