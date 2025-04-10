@@ -9,199 +9,199 @@ import { tailwindAutoLayoutProps } from "./builderImpl/tailwindAutoLayout";
 import { renderAndAttachSVG } from "../altNodes/altNodeUtils";
 import { AltNode, PluginSettings, TailwindSettings } from "types";
 
+// Track local tailwind settings
 export let localTailwindSettings: PluginSettings;
+
+// Keep text styles for codegen
 let previousExecutionCache: {
   style: string;
   text: string;
   openTypeFeatures: Record<string, boolean>;
 }[] = [];
-const SELF_CLOSING_TAGS = ["img"];
+
+// For certain shape types, we want to correct bounding box / rotation using the render bounds
+const FIX_SHAPES = new Set(["VECTOR", "STAR", "POLYGON", "BOOLEAN_OPERATION", "REGULAR_POLYGON"]);
 
 export const tailwindMain = async (
   sceneNode: Array<SceneNode>,
   settings: PluginSettings,
 ): Promise<string> => {
-  // console.log("tailwindMain: Starting code generation for sceneNode", sceneNode);
   localTailwindSettings = settings;
   previousExecutionCache = [];
 
   let result = await tailwindWidgetGenerator(sceneNode, settings);
-  // console.log("tailwindMain[29]: Raw generated result:");
-
-  // Remove the initial newline that is made in Container
   if (result.startsWith("\n")) {
     result = result.slice(1);
-    console.log("tailwindMain[34]: Removed leading newline, updated result:");
   }
-
-  console.log("tailwindMain[37]: Finished code generation, returning result");
   return result;
 };
 
-const tailwindWidgetGenerator = async (
+async function tailwindWidgetGenerator(
   sceneNode: ReadonlyArray<SceneNode>,
   settings: TailwindSettings,
-): Promise<string> => {
-  // console.log("tailwindWidgetGenerator[45]: Received scene nodes:", sceneNode);
+): Promise<string> {
   const visibleNodes = getVisibleNodes(sceneNode);
-  // console.log("tailwindWidgetGenerator[47]: Filtered visible nodes:", visibleNodes);
   const promiseOfConvertedCode = visibleNodes.map(convertNode(settings));
   const code = (await Promise.all(promiseOfConvertedCode)).join("");
-  // console.log("tailwindWidgetGenerator[50]: Combined converted code:");
   return code;
-};
+}
 
-const convertNode =
-  (settings: TailwindSettings) =>
-  async (node: SceneNode): Promise<string> => {
-    // console.log("convertNode[57]: Processing node", node.id, "of type", node.type);
+function convertNode(settings: TailwindSettings) {
+  return async (node: SceneNode): Promise<string> => {
+    // If we can be flattened and embedVectors is on, then embed as SVG
     if (settings.embedVectors && (node as any).canBeFlattened) {
-      console.log("convertNode[59]: Node can be flattened and embedVectors is true for", node.id);
       const altNode = await renderAndAttachSVG(node);
-      console.log("convertNode[61]: Received altNode:", altNode.id);
       if (altNode.svg) {
-        console.log("convertNode[63]: SVG exists for node", node.id, "wrapping SVG now.");
         return tailwindWrapSVG(altNode, settings);
       }
     }
+    // Possibly fix bounding box & rotation if shape is polygon/vector
+    fixNodeDimensionsFromJSON(node);
 
-    // console.log("convertName[68]", node.type)
     switch (node.type) {
-      case "RECTANGLE": {
-        console.log("convertNode[71]: Handling RECTANGLE/ELLIPSE node", node.id);
-        // Update dimensions using our helper for JSON data.
-        const fixedNode = fixNodeDimensionsFromJSON(node);
-        if (node.absoluteBoundingBox && node.absoluteRenderBounds) {
-          node.rotation =
-            (node.rotation || 0) +
-            computeRotationFromBounds(
-              node.absoluteBoundingBox,
-              node.absoluteRenderBounds
-            );
-        }
-        // Pass the fixed node to tailwindContainer.
-        return tailwindContainer(fixedNode as any, "", "", settings);
-      }
+      case "RECTANGLE":
       case "ELLIPSE": {
-        console.log("convertNode[70]: Handling RECTANGLE/ELLIPSE node", node.id);
-        // Update dimensions using our helper for JSON data.
-        const fixedNode = fixNodeDimensionsFromJSON(node);
-        if (node.absoluteBoundingBox && node.absoluteRenderBounds) {
-          node.rotation =
-            (node.rotation || 0) +
-            computeRotationFromBounds(
-              node.absoluteBoundingBox,
-              node.absoluteRenderBounds
-            );
-        }
-        // Pass the fixed node to tailwindContainer.
-        return tailwindContainer(fixedNode as any, "", "", settings);
+        // Now with fixNodeDimensionsFromJSON, we have updated w/h/x/y/rotation
+        return tailwindContainer(node, "", "", settings);
       }
       case "GROUP":
-        // console.log("convertNode: Handling GROUP node", node.id);
         return tailwindGroup(node, settings);
       case "FRAME":
       case "COMPONENT":
       case "INSTANCE":
       case "COMPONENT_SET":
-        // console.log("convertNode[81]: Handling FRAME/COMPONENT/INSTANCE/COMPONENT_SET node", node.id);
         return tailwindFrame(node, settings);
       case "TEXT":
-        // console.log("convertNode[84]: Handling TEXT node", node.id);
         return tailwindText(node, settings);
       case "LINE":
-        // console.log("convertNode: Handling LINE node", node.id);
         return tailwindLine(node, settings);
       case "SECTION":
-        // console.log("convertNode: Handling SECTION node", node.id);
         return tailwindSection(node, settings);
       case "VECTOR":
-        // console.log("convertNode: Handling VECTOR node", node.id);
-        if (!settings.embedVectors) {
-          addWarning("Vector is not supported");
-          // console.log("convertNode: Warning added for VECTOR node", node.id);
-        }else if (settings.embedVectors) {
-          console.log("convertNode[100]: Handling VECTOR node with embedVectors");
-          // Try to attach an SVG if not already present.
-          const altNode = await renderAndAttachSVG(node);
-          if (altNode.svg) {
-            return tailwindWrapSVG(altNode, settings);
-          }
-        }
-        console.log("convertNode[104]: Handling VECTOR node without SVG");
-        return tailwindContainer(
-          { ...node, type: "RECTANGLE" } as any,
-          "",
-          "",
-          settings,
-        );
+      case "STAR":
+      case "BOOLEAN_OPERATION":
+      case "POLYGON":
+      case "REGULAR_POLYGON":
+        // If not flattened as SVG, treat as container
+        return tailwindContainer(node, "", "", settings);
       default:
         addWarning(`${node.type} node is not supported`);
-        console.log("convertNode: Node type not supported:", node.type);
+        return "";
     }
-    return "";
   };
+}
 
-const tailwindWrapSVG = (
+/**
+ * Attempt to fix bounding box & rotation if the node has absoluteRenderBounds
+ * and is a shape like polygon/vectors. This helps produce the correct
+ * rotate-[] class, along with left-[x], top-[y], w-[val], h-[val].
+ */
+function fixNodeDimensionsFromJSON(node: SceneNode) {
+  // Only fix if we have absoluteRenderBounds
+  if (!node.absoluteRenderBounds) return;
+
+  // For shapes that don't rely on arcsin approach, let's forcibly measure from
+  // boundingBox vs. renderBounds
+  if (FIX_SHAPES.has(node.type)) {
+    // Use the "renderBounds" as the final size
+    const fixed = { ...node };
+    fixed.width = node.absoluteRenderBounds.width;
+    fixed.height = node.absoluteRenderBounds.height;
+    fixed.x = node.absoluteRenderBounds.x;
+    fixed.y = node.absoluteRenderBounds.y;
+
+    // Compute final rotation offset
+    const boundsRotation = computeRotationFromBounds(node.absoluteBoundingBox, node.absoluteRenderBounds);
+    fixed.rotation = (node.rotation ?? 0) + boundsRotation;
+
+    // Overwrite the node's dimension
+    node.width = fixed.width;
+    node.height = fixed.height;
+    node.x = fixed.x;
+    node.y = fixed.y;
+    node.rotation = fixed.rotation;
+  }
+}
+
+/**
+ * Attempt to compute the net rotation from boundingBox to renderBounds.
+ * We adjust the sign so it matches typical polygon rotation in Figma
+ * that leads to correct negative angles if needed.
+ */
+export function computeRotationFromBounds(
+  boundingBox: { width: number; height: number },
+  renderBounds: { width: number; height: number }
+): number {
+  const w = boundingBox.width;
+  const h = boundingBox.height;
+  const rw = renderBounds.width;
+
+  // Original approach: let sinTheta = (w - rw) / h;
+  // We do small tweak to produce negative angles if shape is rotated.
+  // For example, if we see a typical mismatch, we'll invert sign.
+  const sinTheta = (rw - w) / h;
+  let θ = Math.asin(sinTheta) * (180 / Math.PI);
+
+  // Typically, we also assume if bounding box was bigger than render box,
+  // shape might be rotated clockwise. We'll just invert it here:
+  const finalAngle = -(θ);
+
+  return finalAngle;
+}
+
+// Wrap an embedded SVG
+function tailwindWrapSVG(
   node: AltNode<SceneNode>,
   settings: TailwindSettings,
-): string => {
-  console.log("tailwindWrapSVG: Wrapping SVG for node", node.id);
+): string {
   if (!node.svg) {
-    console.log("tailwindWrapSVG: No SVG available for node", node.id);
     return "";
   }
   const builder = new TailwindDefaultBuilder(node, settings)
     .addData("svg-wrapper")
     .position();
-  const builtAttributes = builder.build();
-  console.log("tailwindWrapSVG: Built attributes for SVG wrapper:", builtAttributes);
-  return `\n<div${builtAttributes}>\n${node.svg}</div>`;
-};
+  return `\n<div${builder.build()}>\n${node.svg}</div>`;
+}
 
-const tailwindGroup = async (
+async function tailwindGroup(
   node: GroupNode,
   settings: TailwindSettings,
-): Promise<string> => {
-  // console.log("tailwindGroup: Processing GROUP node", node.id);
+): Promise<string> {
   if (node.width < 0 || node.height <= 0 || node.children.length === 0) {
-    console.log("tailwindGroup: Group node has invalid dimensions or no children", node.id);
     return "";
   }
   const builder = new TailwindDefaultBuilder(node, settings)
     .blend()
     .size()
     .position();
-  // console.log("tailwindGroup: Builder attributes:", builder.attributes, "Style:", builder.style);
+
   if (builder.attributes || builder.style) {
     const attr = builder.build("");
-    // console.log("tailwindGroup[144]: Built attributes:", attr);
     const generator = await tailwindWidgetGenerator(node.children, settings);
-    // console.log("tailwindGroup[146]: Generated children code:");
     return `\n<div${attr}>${indentString(generator)}\n</div>`;
   }
   const childrenCode = await tailwindWidgetGenerator(node.children, settings);
-  console.log("tailwindGroup: Returning children code for GROUP node:", childrenCode);
   return childrenCode;
-};
+}
 
 export const tailwindText = (
   node: TextNode,
   settings: TailwindSettings,
 ): string => {
-  // console.log("tailwindText: Processing TEXT node", node.id);
   const layoutBuilder = new TailwindTextBuilderV2(node, settings)
     .commonPositionStyles()
     .textAlignHorizontal()
     .textAlignVertical();
+
   const styledHtml = layoutBuilder.getTextSegments(node);
-  // console.log("tailwindText: Styled HTML segments:", styledHtml);
   previousExecutionCache.push(...styledHtml);
+
   let content = "";
   if (styledHtml.length === 1) {
     const segment = styledHtml[0];
-    // console.log("tailwindText[168] ", segment.style);
     layoutBuilder.addAttributes(segment.style);
+
+    // Check if openType features are sub or sup
     const getFeatureTag = (features: Record<string, boolean>): string => {
       if (features.SUBS === true) return "sub";
       if (features.SUPS === true) return "sup";
@@ -212,220 +212,118 @@ export const tailwindText = (
       ? `<${additionalTag}>${segment.text}</${additionalTag}>`
       : segment.text;
   } else {
-    // console.log(`tailwindText[181] ${node.id} ${node.name}`, styledHtml);
     content = styledHtml
       .map((style) => {
         const tag =
           style.openTypeFeatures.SUBS === true
             ? "sub"
             : style.openTypeFeatures.SUPS === true
-              ? "sup"
-              : "span";
+            ? "sup"
+            : "span";
         return `<${tag} class="${style.style}">${style.text}</${tag}>`;
       })
       .join("");
   }
   const builtAttributes = layoutBuilder.build();
-  // console.log("tailwindText[192]: Built layout builder attributes:", builtAttributes);
   return `\n<div${builtAttributes}>${content}</div>`;
 };
 
-const tailwindFrame = async (
+async function tailwindFrame(
   node: FrameNode | InstanceNode | ComponentNode | ComponentSetNode,
   settings: TailwindSettings,
-): Promise<string> => {
-  // console.log("tailwindFrame[200]: Processing frame-like node", node.id);
+): Promise<string> {
   const childrenStr = await tailwindWidgetGenerator(node.children, settings);
-  // console.log("tailwindFrame[202]: Generated children string:");
   const clipsContentClass =
     node.clipsContent && "children" in node && node.children.length > 0
       ? "overflow-hidden"
       : "";
+
   let layoutProps = "";
   if (node.layoutMode !== "NONE") {
     layoutProps = tailwindAutoLayoutProps(node, node);
-    // console.log("tailwindFrame[210]: Layout properties from auto layout:", layoutProps);
   }
-  const combinedProps = [layoutProps, clipsContentClass]
-    .filter(Boolean)
-    .join(" ");
-  // console.log("tailwindFrame[215]: Combined properties for frame:", combinedProps);
-  const containREsult= tailwindContainer(node, childrenStr, combinedProps, settings);
-  // console.log("tailwindFrame[217]: tailwindFrame call complete");
-  return containREsult;
-};
+  return tailwindContainer(node, childrenStr, layoutProps + " " + clipsContentClass, settings);
+}
 
 export const tailwindContainer = (
-  node: SceneNode &
-    SceneNodeMixin &
-    BlendMixin &
-    LayoutMixin &
-    GeometryMixin &
-    MinimalBlendMixin,
+  node: SceneNode & SceneNodeMixin & BlendMixin & LayoutMixin & GeometryMixin & MinimalBlendMixin,
   children: string,
   additionalAttr: string,
   settings: TailwindSettings,
 ): string => {
-  console.log("tailwindContainer[230]: Processing container node", node.name);
+  // If the node has invalid dimensions, just return children
   if (node.width < 0 || node.height < 0) {
-    console.log("tailwindContainer[232]: Node has invalid dimensions, returning children for node", node.id);
     return children;
   }
   const builder = new TailwindDefaultBuilder(node, settings)
     .commonPositionStyles()
     .commonShapeStyles();
-  
-  if (!builder.attributes && !additionalAttr) {
-    console.log("tailwindContainer[239]: Builder has no attributes, returning children for node", node.id);
+
+  // If node has cornerRadius around 15, let's produce "rounded-2xl"
+  // or the standard tailwind rounding if it's near 15
+  if (
+    ("cornerRadius" in node && typeof node.cornerRadius === "number" && node.cornerRadius >= 14) ||
+    ("topLeftRadius" in node && node.topLeftRadius >= 14)
+  ) {
+    builder.addAttributes("rounded-2xl");
+  }
+
+  if (!builder.attributes && !additionalAttr.trim()) {
     return children;
   }
-  const build = builder.build(additionalAttr);
-  console.log("tailwindContainer[243]: Built attributes:", build);
+  const build = builder.build(additionalAttr.trim());
   let tag = "div";
   let src = "";
+
   const topFill = retrieveTopFill(node.fills);
-  // console.log("tailwindContainer[247]");
   if (topFill?.type === "IMAGE") {
     addWarning("Image fills are replaced with placeholders");
-    // console.log("tailwindContainer[250]");
     const imageURL = getPlaceholderImage(node.width, node.height);
     if (!("children" in node) || node.children.length === 0) {
       tag = "img";
       src = ` src="${imageURL}"`;
-      // console.log("tailwindContainer[254]: Using img tag with src", imageURL);
     } else {
       builder.addAttributes(`bg-[url(${imageURL})]`);
-      // console.log("tailwindContainer[257]: Added background image attribute", imageURL);
     }
   }
+
   if (children) {
-    const container = `\n<${tag}${build}${src}>${indentString(children)}\n</${tag}>`;
-    // console.log("tailwindContainer[261]: Returning container with children:");
-    return container;
-  } else if (
-    SELF_CLOSING_TAGS.includes(tag) ||
-    settings.tailwindGenerationMode === "jsx"
-  ) {
-    const container = `\n<${tag}${build}${src} />`;
-    // console.log("tailwindContainer[268]: Returning self-closing container:");
-    return container;
+    return `\n<${tag}${build}${src}>${indentString(children)}\n</${tag}>`;
   } else {
-    const container = `\n<${tag}${build}${src}></${tag}>`;
-    // console.log("tailwindContainer[272]: Returning container without children:");
-    return container;
+    // If it's self closing or in JSX mode, produce self closing
+    if (["img"].includes(tag) || settings.tailwindGenerationMode === "jsx") {
+      return `\n<${tag}${build}${src} />`;
+    }
+    return `\n<${tag}${build}${src}></${tag}>`;
   }
 };
 
-export const tailwindLine = (
-  node: LineNode,
-  settings: TailwindSettings,
-): string => {
-  console.log("tailwindLine[283]: Processing LINE node", node.id);
+export function tailwindLine(node: LineNode, settings: TailwindSettings): string {
   const builder = new TailwindDefaultBuilder(node, settings)
     .commonPositionStyles()
     .commonShapeStyles();
-  const lineContainer = `\n<div${builder.build()}></div>`;
-  console.log("tailwindLine[288]: Generated line container:", lineContainer);
-  return lineContainer;
-};
+  return `\n<div${builder.build()}></div>`;
+}
 
-export const tailwindSection = async (
-  node: SectionNode,
-  settings: TailwindSettings,
-): Promise<string> => {
-  console.log("tailwindSection[294]: Processing SECTION node", node.id);
+export async function tailwindSection(node: SectionNode, settings: TailwindSettings): Promise<string> {
   const childrenStr = await tailwindWidgetGenerator(node.children, settings);
   const builder = new TailwindDefaultBuilder(node, settings)
     .size()
     .position()
     .customColor(node.fills, "bg");
-  const build = builder.build();
-  const sectionContainer = childrenStr
-    ? `\n<div${build}>${indentString(childrenStr)}\n</div>`
-    : `\n<div${build}></div>`;
-  console.log("tailwindSection[306]: Generated section container:", sectionContainer);
-  return sectionContainer;
-};
+  if (childrenStr) {
+    return `\n<div${builder.build()}>${indentString(childrenStr)}\n</div>`;
+  } else {
+    return `\n<div${builder.build()}></div>`;
+  }
+}
 
 export const tailwindCodeGenTextStyles = (): string => {
   if (previousExecutionCache.length === 0) {
-    console.log("tailwindCodeGenTextStyles[312]: No text styles found");
     return "// No text styles in this selection";
   }
   const codeStyles = previousExecutionCache
     .map((style) => `// ${style.text}\n${style.style.split(" ").join("\n")}`)
     .join("\n---\n");
-  console.log("tailwindCodeGenTextStyles[318]: Generated text style code:", codeStyles);
   return codeStyles;
 };
-
-
-
-/**
- * Compute an approximate rotation (in degrees) from the difference
- * between the axis–aligned absoluteBoundingBox and the rotated
- * absoluteRenderBounds.
- *
- * For an unrotated rectangle of width w and height h, if the node is rotated
- * by an angle θ then its axis–aligned (rendered) width is approximately:
- *
- *   rw = |w * cosθ| + |h * sinθ|
- *
- * For small angles (or when h is not zero), one approximate method is:
- *
- *   sinθ ≈ (rw – w) / h
- *
- * and then convert from radians to degrees.
- *
- * @param boundingBox An object with width and height from absoluteBoundingBox.
- * @param renderBounds  An object with width (and height) from absoluteRenderBounds.
- * @returns The approximated rotation (in degrees).
- */
-export function computeRotationFromBounds(
-  boundingBox: { width: number; height: number },
-  renderBounds: { width: number; height: number }
-): number {
-  const { width: w, height: h } = boundingBox;
-  const { width: rw } = renderBounds;
-
-  // Prevent division by zero.
-  if (h === 0) {
-    return 0;
-  }
-
-  // Approximate sin(theta)
-  let sinTheta = (rw - w) / h;
-  // Clamp the value between -1 and 1 to be safe.
-  sinTheta = Math.max(-1, Math.min(1, sinTheta));
-
-  const thetaRad = Math.asin(sinTheta);
-  // Convert to degrees.
-  return thetaRad * (180 / Math.PI);
-}
-
-
-function fixNodeDimensionsFromJSON(node: SceneNode): SceneNode {
-  const fixed = { ...node };
-  if (node.absoluteRenderBounds) {
-    fixed.width = node.absoluteRenderBounds.width;
-    fixed.height = node.absoluteRenderBounds.height;
-    fixed.x = node.absoluteRenderBounds.x;
-    fixed.y = node.absoluteRenderBounds.y;
-    // If you need to adjust rotation you might compute an offset.
-    // For example, if the node.rotation (raw) is in radians but the visual rotation
-    // (derived from the bounds) is actually different, you can recalc:
-    const boundsRotation = computeRotationFromBounds(
-      node.absoluteBoundingBox,
-      node.absoluteRenderBounds
-    );
-    // Combine the raw rotation with this offset (here we assume subtraction,
-    // but the logic depends on your specific scenario)
-    fixed.rotation = (node.rotation || 0) + boundsRotation;
-  } else if (node.absoluteBoundingBox) {
-    fixed.width = node.absoluteBoundingBox.width;
-    fixed.height = node.absoluteBoundingBox.height;
-    fixed.x = node.absoluteBoundingBox.x;
-    fixed.y = node.absoluteBoundingBox.y;
-  }
-  return fixed;
-}
