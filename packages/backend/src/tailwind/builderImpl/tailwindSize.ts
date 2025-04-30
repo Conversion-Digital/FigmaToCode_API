@@ -42,7 +42,7 @@ export const tailwindSizePartial = (
   } else if (size.width === "fill") {
     if (
       nodeParent &&
-      typeof nodeParent === "object" &&
+      typeof nodeParent === "object" && // Add type check to ensure nodeParent is an object 
       "layoutMode" in nodeParent &&
       nodeParent.layoutMode === "HORIZONTAL"
     ) {
@@ -62,6 +62,7 @@ export const tailwindSizePartial = (
   } else if (size.height === "fill") {
     if (
       nodeParent &&
+      typeof nodeParent === "object" && // Add type check to ensure nodeParent is an object
       "layoutMode" in nodeParent &&
       nodeParent.layoutMode === "VERTICAL"
     ) {
