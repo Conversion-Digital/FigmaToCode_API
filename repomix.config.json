@@ -120,7 +120,9 @@
             "packages/headless-basics-components/src/theme/default/structures",
             "packages/headless-basics-components/src/components",
             "packages/headless-basics-components/src/theme/corporate1/components/!(frame469)/**",
-            "packages/headless-basics-components/src/theme/default/components/!(__[template]|hero)/**"
+            "packages/headless-basics-components/src/theme/default/components/!(__[template]|hero)/**",
+
+            "packages/backend/src/api_types.ts"
         ]
     },
     "security": {
